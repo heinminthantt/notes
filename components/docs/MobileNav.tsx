@@ -37,7 +37,7 @@ export function MobileNav() {
       <header className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-5 h-14 bg-background border-b border-[color:var(--border)]">
         <Link href="/" className="flex items-center gap-2.5">
           <span className="text-[0.8125rem] font-semibold tracking-tight text-[color:var(--text-primary)]">
-            Design System Journey
+           My Learning Journey
           </span>
         </Link>
         <div className="flex items-center gap-1">

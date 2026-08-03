@@ -37,7 +37,7 @@ export function Sidebar() {
             A personal guide
           </p>
           <h1 className="text-[0.9375rem] font-semibold tracking-tight text-[color:var(--text-primary)] leading-tight group-hover:opacity-80 transition-opacity">
-            Design System
+            My Learning
             <br />
             Journey
           </h1>
