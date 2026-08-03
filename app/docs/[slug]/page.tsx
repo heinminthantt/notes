@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params
-  const doc = getDocBySlug(slug)
+  const doc = await getDocBySlug(slug)
   if (!doc) return {}
   return {
     title: `${doc.title} — Design System Journey`,
@@ -22,10 +22,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function DocPage({ params }: PageProps) {
   const { slug } = await params
-  const doc = getDocBySlug(slug)
+  const doc = await getDocBySlug(slug)
   if (!doc) notFound()
 
-  const { prev, next } = getAdjacentDocs(slug)
+  const { prev, next } = await getAdjacentDocs(slug)
 
   return <DocReader doc={doc} prev={prev} next={next} />
 }

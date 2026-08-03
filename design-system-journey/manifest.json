@@ -62,13 +62,5 @@
     "title": "What to Study",
     "subtitle": "Curated books, real systems to dissect, and a week-by-week reading order.",
     "createdAt": "2026-08-02T09:00:00.000Z"
-  },
-  {
-    "slug": "new-test",
-    "index": 8,
-    "title": "new test",
-    "subtitle": "",
-    "filename": "08-new-test.md",
-    "createdAt": "2026-08-03T03:46:51.656Z"
   }
 ]

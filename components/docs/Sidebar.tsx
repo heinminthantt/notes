@@ -5,7 +5,12 @@ import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import { PenLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { DOC_META, type DocMeta } from '@/lib/doc-meta'
+interface DocMeta {
+  slug: string
+  title: string
+  subtitle: string
+  createdAt: string
+}
 
 // Fetcher that unwraps the paginated API response to extract the docs array
 const fetcher = async (url: string): Promise<DocMeta[]> => {
@@ -22,10 +27,8 @@ const fetcher = async (url: string): Promise<DocMeta[]> => {
 
 export function Sidebar() {
   const pathname = usePathname()
-  // Use static DOC_META as fallback so chapters always render, even before the API responds
-  const { data: docs = DOC_META } = useSWR<DocMeta[]>('/api/docs', fetcher, {
+  const { data: docs = [] } = useSWR<DocMeta[]>('/api/docs', fetcher, {
     revalidateOnFocus: false,
-    fallbackData: DOC_META,
   })
 
   return (
@@ -67,9 +70,6 @@ export function Sidebar() {
                   )}
                   aria-current={isActive ? 'page' : undefined}
                 >
-                  <span className="font-mono text-[10px] tabular-nums mt-[3px] shrink-0 text-[color:var(--text-muted)]">
-                    {String(doc.index).padStart(2, '0')}
-                  </span>
                   <span className="text-[0.8125rem] leading-snug font-medium">{doc.title}</span>
                 </Link>
               </li>

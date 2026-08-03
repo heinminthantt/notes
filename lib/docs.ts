@@ -1,15 +1,12 @@
-// Server-only — uses fs. Never import this in a 'use client' component.
+// Server-only — uses database. Never import this in a 'use client' component.
 import 'server-only'
-import fs from 'fs'
-import path from 'path'
 import { marked } from 'marked'
+import { sql, initDb } from '@/lib/db'
 
 export interface DocMeta {
   slug: string
-  index: number
   title: string
   subtitle: string
-  filename: string
   createdAt: string // ISO 8601
 }
 
@@ -18,48 +15,91 @@ export interface Doc extends DocMeta {
   rawContent: string
 }
 
-const DOCS_DIR = path.join(process.cwd(), 'design-system-journey')
-const MANIFEST_PATH = path.join(DOCS_DIR, 'manifest.json')
-
-export function getManifest(): DocMeta[] {
-  try {
-    const raw = fs.readFileSync(MANIFEST_PATH, 'utf-8')
-    return JSON.parse(raw) as DocMeta[]
-  } catch {
-    return []
-  }
+// Ensure the table exists on first call
+let dbReady: Promise<void> | null = null
+function ensureDb() {
+  if (!dbReady) dbReady = initDb()
+  return dbReady
 }
 
-// Re-exported so callers that used DOC_META still work
-export const DOC_META: DocMeta[] = getManifest()
-
-export function getAllDocs(): DocMeta[] {
-  return getManifest()
+export async function getAllDocs(): Promise<DocMeta[]> {
+  await ensureDb()
+  const rows = await sql`
+    SELECT slug, title, subtitle, created_at as "createdAt"
+    FROM documents
+    ORDER BY created_at DESC
+  `
+  return rows as DocMeta[]
 }
 
-export function getDocBySlug(slug: string): Doc | null {
-  const manifest = getManifest()
-  const meta = manifest.find((d) => d.slug === slug)
-  if (!meta) return null
+export async function getDocBySlug(slug: string): Promise<Doc | null> {
+  await ensureDb()
+  const rows = await sql`
+    SELECT slug, title, subtitle, content, created_at as "createdAt"
+    FROM documents
+    WHERE slug = ${slug}
+    LIMIT 1
+  `
 
-  try {
-    const filePath = path.join(DOCS_DIR, meta.filename)
-    const rawContent = fs.readFileSync(filePath, 'utf-8')
+  if (rows.length === 0) return null
 
-    marked.setOptions({ gfm: true, breaks: false })
-    const html = marked(rawContent) as string
+  const row = rows[0] as { slug: string; title: string; subtitle: string; content: string; createdAt: string }
 
-    return { ...meta, html, rawContent }
-  } catch {
-    return null
-  }
-}
+  marked.setOptions({ gfm: true, breaks: false })
+  const html = marked(row.content) as string
 
-export function getAdjacentDocs(slug: string): { prev: DocMeta | null; next: DocMeta | null } {
-  const manifest = getManifest()
-  const index = manifest.findIndex((d) => d.slug === slug)
   return {
-    prev: index > 0 ? manifest[index - 1] : null,
-    next: index < manifest.length - 1 ? manifest[index + 1] : null,
+    slug: row.slug,
+    title: row.title,
+    subtitle: row.subtitle,
+    createdAt: row.createdAt,
+    html,
+    rawContent: row.content,
   }
+}
+
+export async function getAdjacentDocs(slug: string): Promise<{ prev: DocMeta | null; next: DocMeta | null }> {
+  await ensureDb()
+
+  // Get the current doc's created_at
+  const current = await sql`
+    SELECT created_at FROM documents WHERE slug = ${slug} LIMIT 1
+  `
+
+  if (current.length === 0) return { prev: null, next: null }
+
+  const createdAt = current[0].created_at
+
+  // Previous doc: the one created just before this one (more recent in reading order = older created_at)
+  const prevRows = await sql`
+    SELECT slug, title, subtitle, created_at as "createdAt"
+    FROM documents
+    WHERE created_at < ${createdAt}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `
+
+  // Next doc: the one created just after this one
+  const nextRows = await sql`
+    SELECT slug, title, subtitle, created_at as "createdAt"
+    FROM documents
+    WHERE created_at > ${createdAt}
+    ORDER BY created_at ASC
+    LIMIT 1
+  `
+
+  return {
+    prev: prevRows.length > 0 ? (prevRows[0] as DocMeta) : null,
+    next: nextRows.length > 0 ? (nextRows[0] as DocMeta) : null,
+  }
+}
+
+// Re-export for backward compat — now dynamically loaded
+export const DOC_META: DocMeta[] = []
+
+// Synchronous wrapper is no longer possible with DB — callers should use getAllDocs()
+export function getManifest(): DocMeta[] {
+  // This is kept for import compatibility but returns empty.
+  // Server components should use getAllDocs() instead.
+  return []
 }

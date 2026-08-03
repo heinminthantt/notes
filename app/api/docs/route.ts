@@ -1,76 +1,85 @@
 import { NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
+import { sql, initDb } from '@/lib/db'
 
-const DOCS_DIR = path.join(process.cwd(), 'design-system-journey')
-const MANIFEST_PATH = path.join(DOCS_DIR, 'manifest.json')
-
-interface DocMeta {
-  slug: string
-  index: number
-  title: string
-  subtitle: string
-  filename: string
-  createdAt: string
+// Ensure the table exists on first request
+let dbReady: Promise<void> | null = null
+function ensureDb() {
+  if (!dbReady) dbReady = initDb()
+  return dbReady
 }
 
-function readManifest(): DocMeta[] {
-  try {
-    return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'))
-  } catch {
-    return []
-  }
-}
-
-function writeManifest(manifest: DocMeta[]) {
-  fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n', 'utf-8')
-}
-
-// GET /api/docs — returns paginated + sorted manifest
-// Query params: sort=newest|oldest|az|za, page=1, per_page=10
+// GET /api/docs — returns paginated + sorted documents
+// Query params: sort=newest|oldest|az|za, page=1, per_page=10, q=search
 export async function GET(req: Request) {
+  await ensureDb()
+
   const { searchParams } = new URL(req.url)
   const sort = (searchParams.get('sort') ?? 'newest') as 'newest' | 'oldest' | 'az' | 'za'
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
   const perPage = Math.min(50, Math.max(1, parseInt(searchParams.get('per_page') ?? '10', 10)))
-  const query = (searchParams.get('q') ?? '').toLowerCase().trim()
+  const query = (searchParams.get('q') ?? '').trim()
+  const offset = (page - 1) * perPage
 
-  let manifest = readManifest()
-
-  // Filter by search query (title + subtitle)
-  if (query) {
-    manifest = manifest.filter(
-      (d) =>
-        d.title.toLowerCase().includes(query) ||
-        d.subtitle.toLowerCase().includes(query),
-    )
+  // Build ORDER BY clause
+  const orderMap: Record<string, ReturnType<typeof sql.unsafe>> = {
+    newest: sql.unsafe('created_at DESC'),
+    oldest: sql.unsafe('created_at ASC'),
+    az: sql.unsafe('title ASC'),
+    za: sql.unsafe('title DESC'),
   }
+  const orderClause = orderMap[sort] ?? orderMap.newest
 
-  // Sort
-  if (sort === 'newest') {
-    manifest = [...manifest].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
-  } else if (sort === 'oldest') {
-    manifest = [...manifest].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    )
-  } else if (sort === 'az') {
-    manifest = [...manifest].sort((a, b) => a.title.localeCompare(b.title))
-  } else if (sort === 'za') {
-    manifest = [...manifest].sort((a, b) => b.title.localeCompare(a.title))
+  try {
+    let items
+    let countResult
+
+    if (query) {
+      // Full-text search across title, subtitle, and content + ILIKE fallback
+      const pattern = `%${query}%`
+      items = await sql`
+        SELECT slug, title, subtitle, created_at as "createdAt"
+        FROM documents
+        WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(subtitle, '') || ' ' || coalesce(content, ''))
+              @@ plainto_tsquery('english', ${query})
+           OR title ILIKE ${pattern}
+           OR subtitle ILIKE ${pattern}
+        ORDER BY ${orderClause}
+        LIMIT ${perPage} OFFSET ${offset}
+      `
+      countResult = await sql`
+        SELECT COUNT(*)::int as count
+        FROM documents
+        WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(subtitle, '') || ' ' || coalesce(content, ''))
+              @@ plainto_tsquery('english', ${query})
+           OR title ILIKE ${pattern}
+           OR subtitle ILIKE ${pattern}
+      `
+    } else {
+      items = await sql`
+        SELECT slug, title, subtitle, created_at as "createdAt"
+        FROM documents
+        ORDER BY ${orderClause}
+        LIMIT ${perPage} OFFSET ${offset}
+      `
+      countResult = await sql`
+        SELECT COUNT(*)::int as count FROM documents
+      `
+    }
+
+    const total = countResult[0]?.count ?? 0
+    const totalPages = Math.ceil(total / perPage)
+
+    return NextResponse.json({ items, total, page, totalPages, perPage })
+  } catch (err) {
+    console.error('[api/docs GET]', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  const total = manifest.length
-  const totalPages = Math.ceil(total / perPage)
-  const start = (page - 1) * perPage
-  const items = manifest.slice(start, start + perPage)
-
-  return NextResponse.json({ items, total, page, totalPages, perPage })
 }
 
-// POST /api/docs — creates a new doc and appends it to the manifest
+// POST /api/docs — creates a new document
 export async function POST(req: Request) {
+  await ensureDb()
+
   try {
     const body = await req.json()
     const { title, subtitle, slug, content } = body as {
@@ -95,44 +104,32 @@ export async function POST(req: Request) {
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '')
 
-    const manifest = readManifest()
-
-    // Guard: no duplicate slug
-    if (manifest.some((d) => d.slug === safeSlug)) {
+    // Check for duplicate slug
+    const existing = await sql`SELECT slug FROM documents WHERE slug = ${safeSlug}`
+    if (existing.length > 0) {
       return NextResponse.json(
-        { error: `A chapter with slug "${safeSlug}" already exists.` },
+        { error: `A document with slug "${safeSlug}" already exists.` },
         { status: 409 },
       )
     }
 
-    const nextIndex = manifest.length
-    const filename = `${String(nextIndex).padStart(2, '0')}-${safeSlug}.md`
-    const filePath = path.join(DOCS_DIR, filename)
+    const result = await sql`
+      INSERT INTO documents (slug, title, subtitle, content)
+      VALUES (${safeSlug}, ${title.trim()}, ${(subtitle ?? '').trim()}, ${content})
+      RETURNING slug, title, subtitle, created_at as "createdAt"
+    `
 
-    // Write the markdown file
-    fs.writeFileSync(filePath, content, 'utf-8')
-
-    // Append to manifest
-    const newEntry: DocMeta = {
-      slug: safeSlug,
-      index: nextIndex,
-      title: title.trim(),
-      subtitle: subtitle?.trim() || '',
-      filename,
-      createdAt: new Date().toISOString(),
-    }
-    manifest.push(newEntry)
-    writeManifest(manifest)
-
-    return NextResponse.json(newEntry, { status: 201 })
+    return NextResponse.json(result[0], { status: 201 })
   } catch (err) {
     console.error('[api/docs POST]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// PUT /api/docs — updates an existing doc's content and/or metadata
+// PUT /api/docs — updates an existing document's content and/or metadata
 export async function PUT(req: Request) {
+  await ensureDb()
+
   try {
     const body = await req.json()
     const { slug, title, subtitle, content } = body as {
@@ -146,33 +143,34 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'slug is required' }, { status: 400 })
     }
 
-    const manifest = readManifest()
-    const idx = manifest.findIndex((d) => d.slug === slug)
-
-    if (idx === -1) {
-      return NextResponse.json({ error: `Chapter "${slug}" not found.` }, { status: 404 })
+    // Check document exists
+    const existing = await sql`SELECT id FROM documents WHERE slug = ${slug}`
+    if (existing.length === 0) {
+      return NextResponse.json({ error: `Document "${slug}" not found.` }, { status: 404 })
     }
 
-    // Update metadata fields if provided
-    if (title) manifest[idx].title = title.trim()
-    if (subtitle !== undefined) manifest[idx].subtitle = subtitle.trim()
-    writeManifest(manifest)
+    // Update all fields using COALESCE to keep existing values for null params
+    const result = await sql`
+      UPDATE documents
+      SET title = COALESCE(${title?.trim() ?? null}, title),
+          subtitle = COALESCE(${subtitle !== undefined ? subtitle.trim() : null}, subtitle),
+          content = COALESCE(${content ?? null}, content),
+          updated_at = NOW()
+      WHERE slug = ${slug}
+      RETURNING slug, title, subtitle, created_at as "createdAt"
+    `
 
-    // Update file content if provided
-    if (content !== undefined) {
-      const filePath = path.join(DOCS_DIR, manifest[idx].filename)
-      fs.writeFileSync(filePath, content, 'utf-8')
-    }
-
-    return NextResponse.json(manifest[idx])
+    return NextResponse.json(result[0])
   } catch (err) {
     console.error('[api/docs PUT]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// DELETE /api/docs — deletes a chapter (password-protected)
+// DELETE /api/docs — deletes a document (password-protected)
 export async function DELETE(req: Request) {
+  await ensureDb()
+
   try {
     const body = await req.json()
     const { slug, password } = body as { slug: string; password: string }
@@ -187,27 +185,11 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'slug is required' }, { status: 400 })
     }
 
-    const manifest = readManifest()
-    const idx = manifest.findIndex((d) => d.slug === slug)
+    const result = await sql`DELETE FROM documents WHERE slug = ${slug} RETURNING slug`
 
-    if (idx === -1) {
-      return NextResponse.json({ error: `Chapter "${slug}" not found.` }, { status: 404 })
+    if (result.length === 0) {
+      return NextResponse.json({ error: `Document "${slug}" not found.` }, { status: 404 })
     }
-
-    // Delete the markdown file
-    const filePath = path.join(DOCS_DIR, manifest[idx].filename)
-    try {
-      fs.unlinkSync(filePath)
-    } catch {
-      // File may already be missing — continue with manifest cleanup
-    }
-
-    // Remove from manifest and re-index
-    manifest.splice(idx, 1)
-    manifest.forEach((d, i) => {
-      d.index = i
-    })
-    writeManifest(manifest)
 
     return NextResponse.json({ ok: true, deleted: slug })
   } catch (err) {
