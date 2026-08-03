@@ -1,0 +1,74 @@
+[
+  {
+    "slug": "start-here",
+    "index": 0,
+    "filename": "00-start-here.md",
+    "title": "Start Here",
+    "subtitle": "What a design system actually is — and why previous attempts failed.",
+    "createdAt": "2026-07-26T09:00:00.000Z"
+  },
+  {
+    "slug": "foundation-thinking",
+    "index": 1,
+    "filename": "01-foundation-thinking.md",
+    "title": "Foundation Thinking",
+    "subtitle": "Design tokens done right — the three-tier model, naming, and scales.",
+    "createdAt": "2026-07-27T09:00:00.000Z"
+  },
+  {
+    "slug": "color-mastery",
+    "index": 2,
+    "filename": "02-color-mastery.md",
+    "title": "Color Mastery",
+    "subtitle": "Color for systems, not decoration — roles, contrast, HSL, dark mode.",
+    "createdAt": "2026-07-28T09:00:00.000Z"
+  },
+  {
+    "slug": "typography-mastery",
+    "index": 3,
+    "filename": "03-typography-mastery.md",
+    "title": "Typography Mastery",
+    "subtitle": "The backbone of every interface — scales, rhythm, and typeface selection.",
+    "createdAt": "2026-07-29T09:00:00.000Z"
+  },
+  {
+    "slug": "space-and-layout",
+    "index": 4,
+    "filename": "04-space-and-layout.md",
+    "title": "Space & Layout",
+    "subtitle": "The mathematics of breathing room — spacing systems and layout primitives.",
+    "createdAt": "2026-07-30T09:00:00.000Z"
+  },
+  {
+    "slug": "component-philosophy",
+    "index": 5,
+    "filename": "05-component-philosophy.md",
+    "title": "Component Philosophy",
+    "subtitle": "Building things that last — contracts, composition, and accessibility.",
+    "createdAt": "2026-07-31T09:00:00.000Z"
+  },
+  {
+    "slug": "documentation-discipline",
+    "index": 6,
+    "filename": "06-documentation-discipline.md",
+    "title": "Documentation Discipline",
+    "subtitle": "Why writing is designing — decision logs, changelogs, and maintenance.",
+    "createdAt": "2026-08-01T09:00:00.000Z"
+  },
+  {
+    "slug": "what-to-study",
+    "index": 7,
+    "filename": "07-what-to-study.md",
+    "title": "What to Study",
+    "subtitle": "Curated books, real systems to dissect, and a week-by-week reading order.",
+    "createdAt": "2026-08-02T09:00:00.000Z"
+  },
+  {
+    "slug": "new-test",
+    "index": 8,
+    "title": "new test",
+    "subtitle": "",
+    "filename": "08-new-test.md",
+    "createdAt": "2026-08-03T03:46:51.656Z"
+  }
+]
