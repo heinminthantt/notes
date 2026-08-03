@@ -6,7 +6,12 @@ import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import { Menu, X, PenLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { DOC_META, type DocMeta } from '@/lib/doc-meta'
+interface DocMeta {
+  slug: string
+  title: string
+  subtitle: string
+  createdAt: string
+}
 
 const fetcher = async (url: string) => {
   const res = await fetch(url)
@@ -23,11 +28,10 @@ export function MobileNav() {
   const pathname = usePathname()
   const { data } = useSWR('/api/docs', fetcher, {
     revalidateOnFocus: false,
-    fallbackData: DOC_META,
   })
 
   // Ensure docs is safely fallback-checked as an array
-  const docs: DocMeta[] = Array.isArray(data) ? data : data?.items ?? data?.docs ?? DOC_META
+  const docs: DocMeta[] = Array.isArray(data) ? data : data?.items ?? data?.docs ?? []
 
   const currentDoc = docs.find((d) => pathname === `/docs/${d.slug}`)
 
@@ -90,9 +94,6 @@ export function MobileNav() {
                         : 'text-[color:var(--text-secondary)]',
                     )}
                   >
-                    <span className="font-mono text-[10px] text-[color:var(--text-muted)]">
-                      {String(doc.index).padStart(2, '0')}
-                    </span>
                     <span className="text-[0.8125rem] font-medium">{doc.title}</span>
                   </Link>
                 </li>
@@ -106,7 +107,7 @@ export function MobileNav() {
       {currentDoc && !open && (
         <div className="lg:hidden fixed top-14 left-0 right-0 z-20 px-5 py-2 bg-background border-b border-[color:var(--border)]">
           <p className="text-[11px] text-[color:var(--text-muted)] font-mono">
-            {String(currentDoc.index).padStart(2, '0')} &mdash; {currentDoc.title}
+            {currentDoc.title}
           </p>
         </div>
       )}
