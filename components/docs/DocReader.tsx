@@ -16,9 +16,16 @@ export function DocReader({ doc, prev, next }: DocReaderProps) {
       <header className="mb-10 pb-8 border-b border-border">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="font-mono text-[11px] tracking-[0.14em] uppercase text-[color:var(--text-muted)] mb-3">
-              Chapter {String(doc.index).padStart(2, '0')}
-            </p>
+            <time
+              dateTime={doc.createdAt}
+              className="font-mono text-[11px] tracking-[0.14em] uppercase text-[color:var(--text-muted)] mb-3 block"
+            >
+              {new Date(doc.createdAt).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </time>
             <h1 className="text-3xl font-bold tracking-tight text-[color:var(--text-primary)] leading-tight mb-3">
               {doc.title}
             </h1>
