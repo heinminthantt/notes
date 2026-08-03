@@ -24,7 +24,6 @@ const CONN_STRING = DATABASE_URL
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  // @ts-expect-error — Node.js supports `family` but the types may lag
   family: 4, // Force IPv4
 })
 
